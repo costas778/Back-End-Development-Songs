@@ -98,4 +98,103 @@ def test_mongo():
 # Content-Length: 319
 # Connection: close
 
-# {"message":"Successfully connected to MongoDB!","sample_song":{"_id":{"$oid":"66d76b71db6d955ff9d2a5d4"},"id":1,"lyrics":"Morbi non lectus. Aliquam sit amet diam in magna bibendum imperdiet. Nullam orci pede, venenatis non, sodales sed, tincidunt eu, felis.","title":"duis faucibus accumsan odio curabitur convallis"}}
+# {"message":"Successfully connected to MongoDB!","sample_song":{"_id":{"$oid":"66d76b71db6d955ff9d2a5d4"},
+#"id":1,"lyrics":"Morbi non lectus. Aliquam sit amet diam in magna bibendum imperdiet. Nullam orci pede,
+# venenatis non, sodales sed, tincidunt eu, felis.","title":"duis faucibus accumsan odio curabitur convallis"}}
+
+######################################################################
+# GET /Song Endpoint
+######################################################################
+
+@app.route("/song", methods=["GET"])
+def songs():
+    try:
+        # Retrieve all songs from the MongoDB collection
+        songs_list = list(db.songs.find({}))
+        # Return the list of songs in JSON format with a status code 200
+        return {"songs": parse_json(songs_list)}, 200
+    except Exception as e:
+        app.logger.error(f"Error fetching songs from MongoDB: {str(e)}")
+        return {"message": "Failed to fetch songs"}, 500
+
+######################################################################
+# GET /Song/id Endpoint
+######################################################################
+@app.route("/song/<int:id>", methods=["GET"])
+def get_song_by_id(id):
+    try:
+        # Find a song by its id
+        song = db.songs.find_one({"id": id})
+        if song:
+            # If the song is found, return it as JSON with status 200
+            return parse_json(song), 200
+        else:
+            # If the song is not found, return a 404 error message
+            return {"message": f"Song with id {id} not found"}, 404
+    except Exception as e:
+        app.logger.error(f"Error fetching song with id {id} from MongoDB: {str(e)}")
+        return {"message": "Failed to fetch song"}, 500
+
+######################################################################
+# POST /Song Endpoint
+######################################################################
+@app.route("/song", methods=["POST"])
+def create_song():
+    # Extract the song data from the request body
+    song = request.get_json()
+
+    # Check if a song with the same id already exists
+    existing_song = db.songs.find_one({"id": song["id"]})
+    
+    if existing_song:
+        # If the song already exists, return a 302 FOUND response
+        return jsonify({"Message": f"song with id {song['id']} already present"}), 302
+
+    # Insert the new song into the database
+    result = db.songs.insert_one(song)
+
+    # Return a 201 CREATED response with the inserted id
+    return jsonify({"inserted id": str(result.inserted_id)}), 201
+
+######################################################################
+# PUT /Song Endpoint
+######################################################################
+
+@app.route("/song/<int:id>", methods=["PUT"])
+def update_song(id):
+    # Extract the updated song data from the request body
+    updated_song = request.get_json()
+
+    # Find the song in the database
+    existing_song = db.songs.find_one({"id": id})
+    
+    if not existing_song:
+        # If the song does not exist, return a 404 NOT FOUND response
+        return jsonify({"message": "song not found"}), 404
+
+    # Update the song in the database
+    result = db.songs.update_one({"id": id}, {"$set": updated_song})
+
+    if result.modified_count > 0:
+        # If the song was updated, return the updated song
+        return jsonify({"_id": str(existing_song["_id"]), "id": id, **updated_song}), 201
+    else:
+        # If the song was found but nothing was updated, return a 200 OK response
+        return jsonify({"message": "song found, but nothing updated"}), 200
+
+######################################################################
+# DELETE /Song Endpoint
+######################################################################
+
+@app.route("/song/<int:id>", methods=["DELETE"])
+def delete_song(id):
+    # Attempt to delete the song from the database
+    result = db.songs.delete_one({"id": id})
+
+    if result.deleted_count == 0:
+        # If no song was deleted, return a 404 NOT FOUND response
+        return jsonify({"message": "song not found"}), 404
+
+    # If the song was successfully deleted, return a 204 NO CONTENT response
+    return '', 204
+
